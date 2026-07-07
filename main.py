@@ -19,6 +19,7 @@ from engine import (
     check_positions,
     discover,
     fetch_token,
+    find_fast_movers,
     get_store,
     score_entry,
 )
@@ -69,6 +70,15 @@ DB_FILE = "alerts_db.json"
 STORE = get_store()
 ALERTS_KEY = "alerts"
 ADMINS_KEY = "admins"
+
+# --- Autonomous "fast mover" radar (pulse) ---
+PULSE_SUBS_KEY = "pulse_subs"          # chats opted in via /radar on
+PULSE_SEEN_KEY = "pulse_seen"          # per-token cooldown memory
+PULSE_CHAT_ID = os.environ.get("PULSE_CHAT_ID")   # optional always-on channel
+PULSE_INTERVAL = int(os.environ.get("PULSE_INTERVAL", "120"))  # seconds
+PULSE_COOLDOWN_MIN = 60                 # don't re-alert a token within an hour...
+PULSE_REALERT_MULT = 1.5               # ...unless its MC grew 1.5x since
+PULSE_MAX_PER_CYCLE = 5                 # cap alerts per cycle to avoid spam
 
 # Wizard States
 ASK_ADDRESS, ASK_TARGET = range(2)
@@ -171,7 +181,7 @@ async def check_alerts(context: ContextTypes.DEFAULT_TYPE):
             user_tag = f"<a href='tg://user?id={job['user_id']}'>{job['user_name']}</a>"
             fmt_target = format_currency(job['target'])
             fmt_mc = format_currency(data['mc'])
-            msg = (f"{emoji} <b>OFFTHEBLOCK ALERT</b>\n🔔 Set by: {user_tag}\n\n💎 <b>{data['symbol']}</b>\nTarget: {fmt_target}\nCurrent MC: <b>{fmt_mc}</b>\nPrice: ${data['price']:.6f}")
+            msg = (f"{emoji} <b>RADAR ALERT</b>\n🔔 Set by: {user_tag}\n\n💎 <b>{data['symbol']}</b>\nTarget: {fmt_target}\nCurrent MC: <b>{fmt_mc}</b>\nPrice: ${data['price']:.6f}")
             try: await context.bot.send_message(job['chat_id'], msg, parse_mode='HTML')
             except: pass
             remove_alert_from_disk(job_name)
@@ -508,6 +518,133 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(reply)
 
 
+# ---- autonomous fast-mover radar ----------------------------------------
+
+def _load_pulse_subs():
+    raw = STORE.get(PULSE_SUBS_KEY)
+    try:
+        return [str(x) for x in json.loads(raw)] if raw else []
+    except (ValueError, TypeError):
+        return []
+
+
+def _save_pulse_subs(subs):
+    STORE.set(PULSE_SUBS_KEY, json.dumps(sorted(set(str(x) for x in subs))))
+
+
+def _pulse_recipients():
+    subs = set(_load_pulse_subs())
+    if PULSE_CHAT_ID:
+        subs.add(str(PULSE_CHAT_ID))
+    return list(subs)
+
+
+def _load_pulse_seen():
+    raw = STORE.get(PULSE_SEEN_KEY)
+    try:
+        return json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def _prune_seen(seen, now, hours=6):
+    out = {}
+    for k, v in seen.items():
+        try:
+            if (now - datetime.fromisoformat(v["ts"])).total_seconds() < hours * 3600:
+                out[k] = v
+        except Exception:
+            pass
+    return out
+
+
+def format_pulse(alert) -> str:
+    s = alert.snapshot
+    return (f"⚡ <b>FAST MOVER — ${s.symbol}</b>\n"
+            f"{alert.trigger}\n"
+            f"MC {format_currency(s.market_cap)} · "
+            f"Liq {format_currency(s.liquidity)} · "
+            f"{s.buy_ratio('h1'):.0%} buys 1h\n"
+            f"<code>{s.address}</code>\n"
+            f"<i>Not financial advice.</i>")
+
+
+async def radar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Opt this chat in/out of autonomous fast-mover alerts."""
+    chat = update.effective_chat
+    arg = (context.args[0].lower() if context.args else "status")
+    cid = str(chat.id)
+    subs = _load_pulse_subs()
+
+    if arg == "on":
+        allowed, reason = await check_access(context, update.effective_user.id)
+        if not allowed:
+            await update.message.reply_text(reason, parse_mode='HTML')
+            return
+        if cid not in subs:
+            subs.append(cid)
+            _save_pulse_subs(subs)
+        await update.message.reply_text(
+            "⚡ <b>Radar auto-alerts ON.</b>\nI'll ping this chat when a token "
+            "spikes fast on rising volume — no tracking needed.\n"
+            "<i>Not financial advice.</i>", parse_mode='HTML')
+    elif arg == "off":
+        _save_pulse_subs([x for x in subs if x != cid])
+        await update.message.reply_text("🔕 Radar auto-alerts OFF for this chat.")
+    else:
+        state = "ON ⚡" if cid in subs else "OFF 🔕"
+        await update.message.reply_text(
+            f"Radar auto-alerts are <b>{state}</b> for this chat.\n"
+            f"Use <code>/radar on</code> or <code>/radar off</code>.",
+            parse_mode='HTML')
+
+
+async def radar_pulse_job(context: ContextTypes.DEFAULT_TYPE):
+    """Scan the market and push fast-mover alerts to opted-in chats."""
+    recipients = _pulse_recipients()
+    if not recipients:
+        return  # nobody listening — skip the API calls entirely
+    try:
+        snaps = await asyncio.to_thread(discover)
+    except Exception as e:
+        logging.warning("pulse discover failed: %s", e)
+        return
+    movers = find_fast_movers(snaps)
+    if not movers:
+        return
+
+    now = datetime.now(timezone.utc)
+    seen = _load_pulse_seen()
+    fresh = []
+    for a in movers:
+        addr = a.snapshot.address
+        prev = seen.get(addr)
+        if prev:
+            try:
+                ts = datetime.fromisoformat(prev["ts"])
+                within_cooldown = (now - ts).total_seconds() < PULSE_COOLDOWN_MIN * 60
+            except Exception:
+                within_cooldown = False
+            if within_cooldown and a.snapshot.market_cap < prev.get("mc", 0) * PULSE_REALERT_MULT:
+                continue
+        fresh.append(a)
+        seen[addr] = {"ts": now.isoformat(), "mc": a.snapshot.market_cap}
+
+    seen = _prune_seen(seen, now)
+    STORE.set(PULSE_SEEN_KEY, json.dumps(seen))
+    if not fresh:
+        return
+
+    for a in fresh[:PULSE_MAX_PER_CYCLE]:
+        text = format_pulse(a)
+        for chat in recipients:
+            try:
+                await context.bot.send_message(int(chat), text, parse_mode='HTML',
+                                               disable_web_page_preview=True)
+            except Exception:
+                pass
+
+
 async def monitor_positions_job(context: ContextTypes.DEFAULT_TYPE):
     """Periodic exit-signal monitor: DMs users when to act on a position."""
     try:
@@ -540,6 +677,7 @@ async def post_init(application: Application):
     
     commands = [
         BotCommand("scan", "Scan $1M+ tokens with momentum"),
+        BotCommand("radar", "Auto-alerts on fast movers: /radar on"),
         BotCommand("ask", "Ask about the market in plain English"),
         BotCommand("alert", "Set MC alert: /alert [CA] [MC]"),
         BotCommand("alerts", "Manage active alerts"),
@@ -554,6 +692,11 @@ async def post_init(application: Application):
         monitor_positions_job, interval=90, first=30, name="radar_monitor")
     print("🛰️  Position monitor scheduled (every 90s).")
 
+    # Autonomous fast-mover radar (only pings chats that ran /radar on).
+    application.job_queue.run_repeating(
+        radar_pulse_job, interval=PULSE_INTERVAL, first=45, name="radar_pulse")
+    print(f"⚡ Fast-mover radar scheduled (every {PULSE_INTERVAL}s).")
+
 def run_bot():
     keep_alive()
     if not TELEGRAM_TOKEN:
@@ -564,6 +707,7 @@ def run_bot():
     # Handlers
     app.add_handler(CommandHandler("scan", scan_command))
     app.add_handler(CommandHandler("ask", ask_command))
+    app.add_handler(CommandHandler("radar", radar_command))
     app.add_handler(CommandHandler("track", track_command))
     app.add_handler(CommandHandler("positions", positions_command))
     app.add_handler(CommandHandler("alerts", list_alerts))

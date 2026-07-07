@@ -11,6 +11,7 @@ from .chat import provider as chat_provider
 from .discovery import discover, fetch_token, fetch_top_by_volume, fetch_trending
 from .models import Position, TokenSnapshot
 from .monitor import PositionUpdate, check_positions
+from .pulse import PulseAlert, PulseConfig, find_fast_movers
 from .signals import (
     Config,
     EntrySignal,
@@ -38,6 +39,9 @@ __all__ = [
     "evaluate_exit",
     "check_positions",
     "PositionUpdate",
+    "find_fast_movers",
+    "PulseAlert",
+    "PulseConfig",
     "chat_enabled",
     "chat_answer",
     "build_chat_context",

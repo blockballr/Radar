@@ -1,16 +1,23 @@
 # Radar 📡
 
-**Radar** (a.k.a. *OffTheBlock / OTB*) is a Telegram **token screener + signal agent**
-for Solana. It does three things:
+**Radar is an autonomous market agent for Solana, delivered through Telegram.** It
+watches the market for you — continuously scanning for momentum, flagging tokens
+that suddenly move on volume, and managing the positions you hold — so you don't have
+to stare at charts.
 
-1. **Alerts** — pings you when a token's market cap crosses a target you set.
-2. **Scans** — screens live tokens above $1M for the strongest momentum, ranked with
-   transparent reasons.
-3. **Tracks** — babysits your (paper) positions and DMs you when to exit
-   (stop-loss / take-profit / trailing stop / momentum fade / liquidity rug).
+Primarily, Radar **monitors the live Solana market and tells you what's moving and why**:
+
+- **Watches the market on its own** — pushes an alert the moment a token spikes fast
+  on rising volume, no prompting needed.
+- **Screens for momentum on demand** — ranks live tokens above $1M by price action,
+  volume acceleration, buy pressure and liquidity, with transparent reasons.
+- **Manages your positions** — tracks entries and DMs you when to exit (stop-loss /
+  take-profit / trailing stop / momentum fade / liquidity rug).
+- **Answers questions** — ask it about the market in plain English.
+- **Custom market-cap alerts** — pings you when a token crosses a target you set.
 
 Market data comes from free, no-key public APIs — [GeckoTerminal](https://www.geckoterminal.com/dex-api)
-for discovery/metrics and [DexScreener](https://dexscreener.com) for the alert wizard.
+for discovery/metrics and [DexScreener](https://dexscreener.com) for token lookups.
 
 > ⚠️ **Not financial advice.** The scanner and exit calls are transparent momentum
 > heuristics, not alpha. Tokens above $1M market cap are still highly risky.
@@ -43,6 +50,7 @@ and CLIs are thin shells over it.
 | Command | Description |
 | --- | --- |
 | `/scan` | Screen $1M+ tokens by momentum, ranked with reasons |
+| `/radar on` | Auto-alerts (this chat) when a token spikes fast on rising volume; `/radar off` to stop |
 | `/ask <question>` | Ask about the market in plain English (needs a free LLM key) |
 | `/track <CA>` | Track a token for exit signals |
 | `/positions` | View tracked positions with live P&L; tap to stop tracking |
@@ -76,6 +84,13 @@ python track.py rm <CA>        # stop tracking
 | `RADAR_STATE_FILE` | optional | Path for the local JSON store (default `radar_state.json`) |
 | `GEMINI_API_KEY` | optional | Enables `/ask` via Google Gemini free tier |
 | `GROQ_API_KEY` | optional | Enables `/ask` via Groq free tier (used if no Gemini key) |
+| `PULSE_CHAT_ID` | optional | Always post fast-mover alerts to this chat/channel |
+| `PULSE_INTERVAL` | optional | Seconds between fast-mover scans (default `120`) |
+
+**Fast-mover radar:** a background job scans every `PULSE_INTERVAL` seconds and pushes
+an alert when a token spikes (**+12% in 5m** or **+35% in 1h**) on **≥2.5× its hourly
+volume** with real buy pressure. Opt a chat in with `/radar on` (or set `PULSE_CHAT_ID`
+for a fixed channel). A per-token cooldown prevents spam.
 
 **`/ask` assistant:** a free LLM (Gemini or Groq) that answers questions grounded
 **only** in the live scan + your positions — it narrates the engine's data, it never
