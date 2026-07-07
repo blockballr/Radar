@@ -204,3 +204,42 @@ class Position:
             self.peak_price = self.entry_price
         if self.peak_mc <= 0:
             self.peak_mc = self.entry_mc
+
+    def to_dict(self) -> dict:
+        d = {
+            "address": self.address,
+            "symbol": self.symbol,
+            "entry_price": self.entry_price,
+            "entry_mc": self.entry_mc,
+            "entry_time": self.entry_time.isoformat(),
+            "peak_price": self.peak_price,
+            "peak_mc": self.peak_mc,
+            "take_profit_pct": self.take_profit_pct,
+            "stop_loss_pct": self.stop_loss_pct,
+            "trailing_pct": self.trailing_pct,
+            "notes": self.notes,
+            "extra": self.extra,
+        }
+        return d
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "Position":
+        et = d.get("entry_time")
+        entry_time = (
+            datetime.fromisoformat(et) if isinstance(et, str)
+            else et or datetime.now(timezone.utc)
+        )
+        return cls(
+            address=d["address"],
+            symbol=d.get("symbol", "?"),
+            entry_price=float(d["entry_price"]),
+            entry_mc=float(d.get("entry_mc", 0) or 0),
+            entry_time=entry_time,
+            peak_price=float(d.get("peak_price", 0) or 0),
+            peak_mc=float(d.get("peak_mc", 0) or 0),
+            take_profit_pct=float(d.get("take_profit_pct", 50.0)),
+            stop_loss_pct=float(d.get("stop_loss_pct", 25.0)),
+            trailing_pct=float(d.get("trailing_pct", 20.0)),
+            notes=d.get("notes", ""),
+            extra=d.get("extra", {}) or {},
+        )

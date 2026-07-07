@@ -94,6 +94,7 @@ def run(min_score: int, top: int, show_all: bool, as_json: bool, pages: int):
             print(f"        + {r}")
         for f in s.flags:
             print(f"        ! {f}")
+        print(f"        CA: {snap.address}")        # paste this into /track
         print(f"        {snap.dexscreener_url}")
         print()
 

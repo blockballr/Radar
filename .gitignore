@@ -1,6 +1,8 @@
 # Runtime data / secrets — never commit
 alerts_db.json
 admins.json
+radar_state.json
+radar_state.json.tmp
 .env
 *.env
 
