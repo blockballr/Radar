@@ -1,49 +1,83 @@
 # Radar 📡
 
-**Radar** (a.k.a. *OffTheBlock / OTB*) is a Telegram bot that watches Solana token
-market caps and pings you the moment a token crosses a target you set.
+**Radar** (a.k.a. *OffTheBlock / OTB*) is a Telegram **token screener + signal agent**
+for Solana. It does three things:
 
-Prices come from the [DexScreener](https://dexscreener.com) public API, polled every
-30 seconds per active alert. Alerts survive restarts (persisted to disk) and can be
-managed from a private DM with tap-to-delete buttons.
+1. **Alerts** — pings you when a token's market cap crosses a target you set.
+2. **Scans** — screens live tokens above $1M for the strongest momentum, ranked with
+   transparent reasons.
+3. **Tracks** — babysits your (paper) positions and DMs you when to exit
+   (stop-loss / take-profit / trailing stop / momentum fade / liquidity rug).
+
+Market data comes from free, no-key public APIs — [GeckoTerminal](https://www.geckoterminal.com/dex-api)
+for discovery/metrics and [DexScreener](https://dexscreener.com) for the alert wizard.
+
+> ⚠️ **Not financial advice.** The scanner and exit calls are transparent momentum
+> heuristics, not alpha. Tokens above $1M market cap are still highly risky.
 
 ---
 
-## Features
+## Architecture
 
-- **Set alerts two ways**
-  - Guided wizard: `/alert` → paste the contract address (CA) → send a target market cap (`1.7M`, `500k`, `$2,000,000`).
-  - One-shot: `/alert <CA> <target_mc>` directly in a group.
-- **Direction is inferred** — if the target is above the current MC it fires on *rise*, otherwise on *drop*.
-- **Manage alerts** — `/alerts` opens a DM list; tap an entry to delete it.
-- **Persistence** — active alerts are stored in `alerts_db.json` and restored on boot.
-- **Auto-cleanup** — helper/prompt messages self-destruct to keep group chats clean.
-- **Access control**
-  - Users must be members of a gatekeeper Telegram group (`GATEKEEPER_GROUP_ID`).
-  - `/override <MASTER_PASSWORD>` grants an admin bypass (stored in `admins.json`).
-  - `/id` (admins only) prints the current chat's group ID to help configure the gatekeeper.
-- **Keep-alive** — a tiny Flask server on port `8080` responds "Radar is Online" so the
-  process stays awake on always-on hosts (Replit, Render, etc.). Flask auto-installs if missing.
+```
+GeckoTerminal (discovery + metrics)  ─┐
+DexScreener (alert lookups)          ─┤
+                                      ▼
+              engine/  ── host-agnostic core (no Telegram, no host deps)
+                ├─ discovery.py   find + normalize tokens
+                ├─ signals.py     deterministic 0–100 entry score + exit engine
+                ├─ models.py      TokenSnapshot / Position
+                ├─ store.py       KV persistence (JSON file ↔ Upstash Redis)
+                └─ monitor.py     evaluate exits across tracked positions
+                                      ▼
+              main.py   ── Telegram bot (commands + background monitor job)
+              scan.py   ── standalone screener CLI
+              track.py  ── standalone position-tracker CLI
+```
 
-## Commands
+Every money-relevant decision lives in `engine/` as plain, testable Python. The bot
+and CLIs are thin shells over it.
+
+## Commands (Telegram)
 
 | Command | Description |
 | --- | --- |
-| `/alert` | Start the setup wizard (or `/alert <CA> <MC>` for a quick alert) |
+| `/scan` | Screen $1M+ tokens by momentum, ranked with reasons |
+| `/track <CA>` | Track a token for exit signals |
+| `/positions` | View tracked positions with live P&L; tap to stop tracking |
+| `/alert` | Set an MC alert (wizard, or `/alert <CA> <MC>` in a group) |
 | `/alerts` | View / delete your active alerts |
 | `/override <password>` | Activate master admin override |
 | `/id` | Show the current group's chat ID (admins only) |
-| `/cancel` | Cancel the current wizard |
+
+## CLIs (no bot needed)
+
+```bash
+python scan.py                 # screen the market now, human-readable
+python scan.py --min-score 70  # only STRONG signals
+python scan.py --json          # machine-readable (for cron)
+
+python track.py add <CA>       # paper-track a token (mint OR pool address)
+python track.py list           # live P&L on positions
+python track.py check          # evaluate exits now (what the monitor runs)
+python track.py rm <CA>        # stop tracking
+```
 
 ## Configuration
 
-Set these environment variables before running:
-
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `TELEGRAM_TOKEN` | ✅ | Bot token from [@BotFather](https://t.me/BotFather) |
-| `GATEKEEPER_GROUP_ID` | ✅ | Chat ID of the VIP group used for access control |
+| `TELEGRAM_TOKEN` | ✅ (bot) | Bot token from [@BotFather](https://t.me/BotFather) |
+| `GATEKEEPER_GROUP_ID` | ✅ (bot) | Chat ID of the VIP group used for access control |
 | `MASTER_PASSWORD` | optional | Password for the `/override` admin bypass |
+| `UPSTASH_REDIS_REST_URL` | optional | Enables Redis storage (else local JSON file) |
+| `UPSTASH_REDIS_REST_TOKEN` | optional | Upstash REST token (pair with the URL above) |
+| `RADAR_STATE_FILE` | optional | Path for the local JSON store (default `radar_state.json`) |
+
+**Storage:** with no Upstash vars set, all state (alerts, admins, positions) lives in a
+single local JSON file — great for a VM. Set the two `UPSTASH_*` vars and the exact same
+code stores everything in Upstash Redis instead, making the bot safe to run on ephemeral
+/ serverless hosts.
 
 ## Running locally
 
@@ -53,25 +87,31 @@ pip install -r requirements.txt
 export TELEGRAM_TOKEN="123456:ABC..."
 export GATEKEEPER_GROUP_ID="-1001234567890"
 export MASTER_PASSWORD="something-secret"
+# optional — turn on Redis storage:
+# export UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
+# export UPSTASH_REDIS_REST_TOKEN="..."
 
 python main.py
 ```
 
-The bot starts long-polling and launches the keep-alive server on `:8080`.
+The bot long-polls, pushes its slash commands, and schedules the position monitor
+(every 90s). A tiny Flask keep-alive server also runs on `:8080` for hosts that need it.
 
-## Files
+## Free hosting
 
-| File | Description |
-| --- | --- |
-| `main.py` | Entire bot: handlers, alert engine, DexScreener client, Flask keep-alive |
-| `requirements.txt` | Python dependencies |
-| `alerts_db.json` | *(generated)* persisted active alerts — **git-ignored** |
-| `admins.json` | *(generated)* override-admin user IDs — **git-ignored** |
+Designed to run at $0. Recommended: an always-on free VM (Oracle Cloud "Always Free"
+or Fly.io) running `python main.py`, with Upstash Redis (free tier) for state. See the
+project notes for the step-by-step deploy.
+
+## Tests
+
+```bash
+python tests/test_signals.py        # 10 signal-engine tests
+python tests/test_store_monitor.py  # 6 store + monitor tests
+```
 
 ## Tech stack
 
-- Python 3
-- [python-telegram-bot](https://python-telegram-bot.org/)
-- `requests` (DexScreener API)
+- Python 3, [python-telegram-bot](https://python-telegram-bot.org/) (`JobQueue`)
+- `requests` — GeckoTerminal + DexScreener + Upstash REST
 - Flask (keep-alive)
-- APScheduler (via python-telegram-bot's `JobQueue`)
