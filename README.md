@@ -43,6 +43,7 @@ and CLIs are thin shells over it.
 | Command | Description |
 | --- | --- |
 | `/scan` | Screen $1M+ tokens by momentum, ranked with reasons |
+| `/radar on` | Auto-alerts (this chat) when a token spikes fast on rising volume; `/radar off` to stop |
 | `/ask <question>` | Ask about the market in plain English (needs a free LLM key) |
 | `/track <CA>` | Track a token for exit signals |
 | `/positions` | View tracked positions with live P&L; tap to stop tracking |
@@ -76,6 +77,13 @@ python track.py rm <CA>        # stop tracking
 | `RADAR_STATE_FILE` | optional | Path for the local JSON store (default `radar_state.json`) |
 | `GEMINI_API_KEY` | optional | Enables `/ask` via Google Gemini free tier |
 | `GROQ_API_KEY` | optional | Enables `/ask` via Groq free tier (used if no Gemini key) |
+| `PULSE_CHAT_ID` | optional | Always post fast-mover alerts to this chat/channel |
+| `PULSE_INTERVAL` | optional | Seconds between fast-mover scans (default `120`) |
+
+**Fast-mover radar:** a background job scans every `PULSE_INTERVAL` seconds and pushes
+an alert when a token spikes (**+12% in 5m** or **+35% in 1h**) on **≥2.5× its hourly
+volume** with real buy pressure. Opt a chat in with `/radar on` (or set `PULSE_CHAT_ID`
+for a fixed channel). A per-token cooldown prevents spam.
 
 **`/ask` assistant:** a free LLM (Gemini or Groq) that answers questions grounded
 **only** in the live scan + your positions — it narrates the engine's data, it never
