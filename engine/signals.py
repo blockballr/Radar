@@ -1,11 +1,11 @@
-"""The Radar signal engine — deterministic entry/exit scoring.
+"""The Radar signal engine - deterministic entry/exit scoring.
 
 Design principle: every money-relevant decision lives here, in plain,
 inspectable Python. The (optional) LLM layer only narrates what this module
 decides; it never makes the call. Each result carries human-readable
 `reasons` so the bot can always explain *why*.
 
-Nothing here is financial advice — it is transparent momentum heuristics.
+Nothing here is financial advice - it is transparent momentum heuristics.
 """
 
 from __future__ import annotations
@@ -123,7 +123,7 @@ def score_entry(snap: TokenSnapshot, cfg: Config = Config) -> EntrySignal:
         trend += _clamp(snap.change_h1 / 20.0) * 0.4
     if snap.change_h1 > cfg.PARABOLIC_H1:
         trend *= 0.5
-        flags.append(f"+{snap.change_h1:.0f}% in 1h — may be topping")
+        flags.append(f"+{snap.change_h1:.0f}% in 1h - may be topping")
     trend_pts = trend * 25
     if snap.change_h6 > 0 and snap.change_h1 > 0:
         reasons.append(f"Uptrend: +{snap.change_h1:.0f}% 1h, +{snap.change_h6:.0f}% 6h")
@@ -146,7 +146,7 @@ def score_entry(snap: TokenSnapshot, cfg: Config = Config) -> EntrySignal:
     if br_h1 > 0.55:
         reasons.append(f"Buy pressure {br_h1:.0%} of 1h trades")
     elif br_h1 < 0.45:
-        flags.append(f"Sell pressure — only {br_h1:.0%} buys (1h)")
+        flags.append(f"Sell pressure - only {br_h1:.0%} buys (1h)")
 
     # --- component 4: liquidity & turnover quality (25 pts) --------------
     liq_pts = _clamp((snap.liq_to_mc - 0.02) / 0.13) * 12.5   # 2%..15% -> 0..12.5
@@ -158,7 +158,7 @@ def score_entry(snap: TokenSnapshot, cfg: Config = Config) -> EntrySignal:
         turn_pts = _clamp(to / 1.0) * 12.5
     else:
         turn_pts = _clamp(1 - (to - 3) / 5) * 12.5
-        flags.append(f"Very high turnover ({to:.1f}x MC) — volatile")
+        flags.append(f"Very high turnover ({to:.1f}x MC) - volatile")
     quality_pts = liq_pts + turn_pts
     if snap.liq_to_mc >= 0.08:
         reasons.append(f"Healthy liquidity ({snap.liq_to_mc:.0%} of MC)")
@@ -198,7 +198,7 @@ def evaluate_exit(pos: Position, snap: TokenSnapshot, cfg: Config = Config) -> E
 
     reasons: List[str] = []
 
-    # 1) Rug / liquidity collapse — highest priority, exit immediately.
+    # 1) Rug / liquidity collapse - highest priority, exit immediately.
     liq_change = 0.0
     if pos.entry_mc > 0:
         liq_change = (snap.market_cap / pos.entry_mc - 1) * 100
@@ -208,7 +208,7 @@ def evaluate_exit(pos: Position, snap: TokenSnapshot, cfg: Config = Config) -> E
 
     # 2) Hard stop-loss.
     if pnl <= -pos.stop_loss_pct:
-        reasons.append(f"Down {pnl:.0f}% — stop-loss ({pos.stop_loss_pct:.0f}%) hit")
+        reasons.append(f"Down {pnl:.0f}% - stop-loss ({pos.stop_loss_pct:.0f}%) hit")
         return ExitSignal(pos, snap, ExitAction.STOP_LOSS, pnl, dd, reasons)
 
     # 3) Trailing stop once we are in profit and rolling over from the peak.
@@ -221,14 +221,14 @@ def evaluate_exit(pos: Position, snap: TokenSnapshot, cfg: Config = Config) -> E
 
     # 4) Take-profit target.
     if pnl >= pos.take_profit_pct:
-        reasons.append(f"Up {pnl:.0f}% — take-profit ({pos.take_profit_pct:.0f}%) reached")
+        reasons.append(f"Up {pnl:.0f}% - take-profit ({pos.take_profit_pct:.0f}%) reached")
         return ExitSignal(pos, snap, ExitAction.TAKE_PROFIT, pnl, dd, reasons)
 
-    # 5) Momentum fade — advisory, only when already in profit.
+    # 5) Momentum fade - advisory, only when already in profit.
     if pnl > 10 and snap.buy_ratio("h1") < 0.45 and snap.change_h1 < -5:
         reasons.append(
             f"Momentum fading: {snap.buy_ratio('h1'):.0%} buys, "
-            f"{snap.change_h1:.0f}% 1h — consider trimming ({pnl:+.0f}%)"
+            f"{snap.change_h1:.0f}% 1h - consider trimming ({pnl:+.0f}%)"
         )
         return ExitSignal(pos, snap, ExitAction.MOMENTUM_FADE, pnl, dd, reasons)
 

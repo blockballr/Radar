@@ -2,22 +2,25 @@
 
 Discovers Solana tokens above $1M market cap, scores them with the signal
 engine, and prints the best momentum candidates. Runs standalone with no
-bot, database, or hosting — just `python scan.py`.
+bot, database, or hosting, just `python scripts/scan.py`.
 
-    python scan.py                 # top candidates, human-readable table
-    python scan.py --min-score 60  # only strong-ish signals
-    python scan.py --json          # machine-readable, for the cron loop
-    python scan.py --all           # include AVOID/WEAK for debugging
+    python scripts/scan.py                 # top candidates, human-readable
+    python scripts/scan.py --min-score 60  # only strong-ish signals
+    python scripts/scan.py --json          # machine-readable, for the cron loop
+    python scripts/scan.py --all           # include AVOID/WEAK for debugging
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
-from engine import Verdict, discover, score_entry
-from engine.signals import Config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from engine import Verdict, discover, score_entry  # noqa: E402
+from engine.signals import Config  # noqa: E402
 
 # Windows consoles default to cp1252 and crash on emoji/em-dash; force UTF-8.
 for _stream in (sys.stdout, sys.stderr):
@@ -79,13 +82,13 @@ def run(min_score: int, top: int, show_all: bool, as_json: bool, pages: int):
     for s in keep:
         snap = s.snapshot
         badge = {
-            Verdict.STRONG_ENTER: "🟢 STRONG",
-            Verdict.WATCH: "🟡 WATCH",
-            Verdict.NEUTRAL: "⚪ NEUTRAL",
-            Verdict.WEAK: "🔴 WEAK",
-            Verdict.AVOID: "⛔ AVOID",
+            Verdict.STRONG_ENTER: "STRONG",
+            Verdict.WATCH: "WATCH",
+            Verdict.NEUTRAL: "NEUTRAL",
+            Verdict.WEAK: "WEAK",
+            Verdict.AVOID: "AVOID",
         }[s.verdict]
-        print(f"[{s.score:>3}] {badge:<11} ${snap.symbol:<10} "
+        print(f"[{s.score:>3}] {badge:<8} ${snap.symbol:<10} "
               f"MC {_fmt_usd(snap.market_cap):>8}  "
               f"Liq {_fmt_usd(snap.liquidity):>7}  "
               f"Vol24 {_fmt_usd(snap.volume_h24):>7}  "

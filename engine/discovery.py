@@ -1,6 +1,6 @@
 """Token discovery via the free GeckoTerminal API (no key required).
 
-We pull two candidate pools lists for Solana — trending and top-by-volume —
+We pull two candidate pools lists for Solana - trending and top-by-volume -
 and normalize each into a `TokenSnapshot`. GeckoTerminal already returns
 market cap, liquidity, multi-window volume, price change and buy/sell counts,
 so a single free source covers the whole scan.

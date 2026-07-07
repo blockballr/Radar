@@ -83,7 +83,7 @@ class TokenSnapshot:
 
     @property
     def turnover_h24(self) -> float:
-        """24h volume relative to market cap — how much of the cap traded."""
+        """24h volume relative to market cap - how much of the cap traded."""
         if self.market_cap <= 0:
             return 0.0
         return self.volume_h24 / self.market_cap

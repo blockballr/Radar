@@ -1,4 +1,4 @@
-# Runtime data / secrets — never commit
+# Runtime data and secrets, never commit
 alerts_db.json
 admins.json
 radar_state.json

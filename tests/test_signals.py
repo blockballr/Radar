@@ -1,4 +1,4 @@
-"""Offline sanity tests for the signal engine — no network required.
+"""Offline sanity tests for the signal engine - no network required.
 
 Run with:  python -m pytest tests/ -q      (or)   python tests/test_signals.py
 """

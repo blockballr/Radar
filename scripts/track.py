@@ -4,19 +4,22 @@ Paper-track tokens and get exit calls from the same engine the bot will use.
 State is stored via the shared store (local JSON by default; Upstash Redis if
 its env vars are set), so this CLI and the future bot see the same positions.
 
-    python track.py add <CA> [--tp 50] [--sl 25] [--trail 20]
-    python track.py list
-    python track.py rm <CA>
-    python track.py check          # evaluate exits now (what the cron runs)
+    python scripts/track.py add <CA> [--tp 50] [--sl 25] [--trail 20]
+    python scripts/track.py list
+    python scripts/track.py rm <CA>
+    python scripts/track.py check          # evaluate exits now (what the cron runs)
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from datetime import datetime, timezone
 
-from engine import Position, check_positions, fetch_token, get_store
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from engine import Position, check_positions, fetch_token, get_store  # noqa: E402
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -53,7 +56,7 @@ def cmd_add(args):
     store = get_store()
     snap = fetch_token(args.address)
     if snap is None or snap.price <= 0:
-        print(f"Could not fetch token {args.address} — is the mint correct?")
+        print(f"Could not fetch token {args.address}, is the mint correct?")
         return 1
     pos = Position(
         address=snap.address,
@@ -67,7 +70,7 @@ def cmd_add(args):
     )
     store.add_position(CLI_USER, pos)
     print(f"Tracking ${snap.symbol} @ {_fmt_price(snap.price)} "
-          f"(MC {_fmt_usd(snap.market_cap)}) — "
+          f"(MC {_fmt_usd(snap.market_cap)}): "
           f"TP +{args.tp:.0f}% / SL -{args.sl:.0f}% / trail {args.trail:.0f}%")
     return 0
 
@@ -105,12 +108,12 @@ def cmd_check(args):
     store = get_store()
     updates = check_positions(store)
     if not updates:
-        print("No exit signals — all tracked positions holding.")
+        print("No exit signals, all tracked positions holding.")
         return 0
     print(f"\n{len(updates)} exit signal(s):\n")
     for u in updates:
         ex = u.exit_signal
-        print(f"  🔔 ${u.position.symbol}: {ex.action.value}  ({ex.pnl_pct:+.0f}%)")
+        print(f"  ${u.position.symbol}: {ex.action.value}  ({ex.pnl_pct:+.0f}%)")
         for r in ex.reasons:
             print(f"       {r}")
     print()

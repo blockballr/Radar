@@ -1,4 +1,4 @@
-"""Offline tests for the LLM chat layer — no network, no API key required.
+"""Offline tests for the LLM chat layer - no network, no API key required.
 
 Run:  python tests/test_chat.py
 """

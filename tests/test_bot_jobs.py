@@ -1,8 +1,8 @@
 """Integration test: the background jobs actually deliver Telegram messages.
 
 This drives the real `radar_pulse_job` and `monitor_positions_job` from main.py
-with a fake bot that records `send_message` calls, proving the full pipeline —
-detect -> format -> send -> cooldown/removal — end to end. The only thing not
+with a fake bot that records `send_message` calls, proving the full pipeline -
+detect -> format -> send -> cooldown/removal - end to end. The only thing not
 exercised is the real Telegram network hop, which is already proven live by
 /scan and /ask.
 
