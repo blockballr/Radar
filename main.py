@@ -5,7 +5,23 @@ import json
 import uuid
 import sys
 import subprocess
+import asyncio
+from datetime import datetime, timezone
 from threading import Thread
+
+# Radar signal engine (host-agnostic core: discovery, scoring, storage).
+from engine import (
+    Position,
+    Verdict,
+    build_chat_context,
+    chat_answer,
+    chat_enabled,
+    check_positions,
+    discover,
+    fetch_token,
+    get_store,
+    score_entry,
+)
 
 # ================= AUTO-INSTALL FLASK =================
 try:
@@ -47,6 +63,13 @@ MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD")
 VIP_GROUP_NAME = "OTB-chat"
 DB_FILE = "alerts_db.json"
 
+# Shared persistence: local JSON file by default, Upstash Redis when its env
+# vars (UPSTASH_REDIS_REST_URL / _TOKEN) are set. This is what lets the bot
+# run on ephemeral / serverless hosts with no local disk.
+STORE = get_store()
+ALERTS_KEY = "alerts"
+ADMINS_KEY = "admins"
+
 # Wizard States
 ASK_ADDRESS, ASK_TARGET = range(2)
 
@@ -54,20 +77,20 @@ logging.basicConfig(level=logging.INFO)
 
 # ================= DATABASE ENGINE =================
 def load_alerts_from_disk():
-    if not os.path.exists(DB_FILE): return []
+    raw = STORE.get(ALERTS_KEY)
     try:
-        with open(DB_FILE, 'r') as f: return json.load(f)
-    except: return []
+        return json.loads(raw) if raw else []
+    except (ValueError, TypeError):
+        return []
 
 def save_alert_to_disk(alert_data):
     alerts = load_alerts_from_disk()
     alerts.append(alert_data)
-    with open(DB_FILE, 'w') as f: json.dump(alerts, f)
+    STORE.set(ALERTS_KEY, json.dumps(alerts))
 
 def remove_alert_from_disk(job_name):
-    alerts = load_alerts_from_disk()
-    new_alerts = [a for a in alerts if a['job_name'] != job_name]
-    with open(DB_FILE, 'w') as f: json.dump(new_alerts, f)
+    alerts = [a for a in load_alerts_from_disk() if a['job_name'] != job_name]
+    STORE.set(ALERTS_KEY, json.dumps(alerts))
 
 # ================= HELPER FUNCTIONS =================
 def parse_human_number(text):
@@ -93,24 +116,21 @@ async def self_destruct_job(context: ContextTypes.DEFAULT_TYPE):
     except: pass
 
 # ================= AUTH ENGINE =================
-def is_admin_override(user_id):
+def _load_admins():
+    raw = STORE.get(ADMINS_KEY)
     try:
-        if os.path.exists('admins.json'):
-            with open('admins.json', 'r') as f:
-                admins = json.load(f)
-                return str(user_id) in admins
-    except: pass
-    return False
+        return json.loads(raw) if raw else []
+    except (ValueError, TypeError):
+        return []
+
+def is_admin_override(user_id):
+    return str(user_id) in _load_admins()
 
 def add_admin(user_id):
-    admins = []
-    try:
-        if os.path.exists('admins.json'):
-            with open('admins.json', 'r') as f: admins = json.load(f)
-    except: pass
+    admins = _load_admins()
     if str(user_id) not in admins:
         admins.append(str(user_id))
-        with open('admins.json', 'w') as f: json.dump(admins, f)
+        STORE.set(ADMINS_KEY, json.dumps(admins))
 
 async def check_access(context: ContextTypes.DEFAULT_TYPE, user_id: int):
     if is_admin_override(user_id): return True, None
@@ -207,6 +227,11 @@ async def handle_alert_callback(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     data = query.data
+    if data.startswith("UNTRACK_"):
+        addr = data.split("UNTRACK_", 1)[1]
+        STORE.remove_position(query.from_user.id, addr)
+        await query.edit_message_text("✅ Stopped tracking.")
+        return
     if data.startswith("DEL_"):
         job_name = data.split("DEL_")[1]
         jobs = context.job_queue.get_jobs_by_name(job_name)
@@ -333,6 +358,180 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("❌ Cancelled.")
     return ConversationHandler.END
 
+# ================= SCREENER / POSITION AGENT =================
+
+def run_scan(min_score: int = 55, top: int = 8):
+    """Discover + score the market; return the top entry candidates."""
+    signals = [score_entry(s) for s in discover()]
+    signals = [s for s in signals
+               if s.verdict != Verdict.AVOID and s.score >= min_score]
+    signals.sort(key=lambda s: s.score, reverse=True)
+    return signals[:top]
+
+
+def _badge(verdict) -> str:
+    return {"STRONG_ENTER": "🟢", "WATCH": "🟡",
+            "NEUTRAL": "⚪", "WEAK": "🔴"}.get(verdict.value, "⚪")
+
+
+def format_scan(signals) -> str:
+    if not signals:
+        return ("📡 <b>Radar Scan</b>\nNo momentum candidates above the bar "
+                "right now. Try again shortly.")
+    lines = ["📡 <b>Radar Scan</b> — top momentum &gt;$1M",
+             "<i>Not financial advice.</i>", ""]
+    for s in signals:
+        snap = s.snapshot
+        lines.append(
+            f"{_badge(s.verdict)} <b>${snap.symbol}</b> — {s.score}\n"
+            f"MC {format_currency(snap.market_cap)} · "
+            f"Liq {format_currency(snap.liquidity)} · "
+            f"1h {snap.change_h1:+.0f}% 6h {snap.change_h6:+.0f}%\n"
+            f"<code>{snap.address}</code>"
+        )
+    lines.append("\nTap a CA to copy, then <code>/track &lt;CA&gt;</code>.")
+    return "\n".join(lines)
+
+
+async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    allowed, reason = await check_access(context, user_id)
+    if not allowed:
+        await update.message.reply_text(reason, parse_mode='HTML')
+        return
+    notice = await update.message.reply_text("🔍 Scanning the market…")
+    signals = await asyncio.to_thread(run_scan)
+    text = format_scan(signals)
+    try:
+        await notice.edit_text(text, parse_mode='HTML',
+                               disable_web_page_preview=True)
+    except Exception:
+        await update.message.reply_text(text, parse_mode='HTML',
+                                        disable_web_page_preview=True)
+
+
+async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    allowed, reason = await check_access(context, user.id)
+    if not allowed:
+        await update.message.reply_text(reason, parse_mode='HTML')
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "Usage: <code>/track &lt;CA&gt;</code>\nPaste a token contract "
+            "address to track it for exit signals.", parse_mode='HTML')
+        return
+    address = context.args[0].strip()
+    snap = await asyncio.to_thread(fetch_token, address)
+    if not snap or snap.price <= 0:
+        await update.message.reply_text(
+            "❌ Couldn't fetch that token. Double-check the contract address.")
+        return
+    pos = Position(address=snap.address, symbol=snap.symbol,
+                   entry_price=snap.price, entry_mc=snap.market_cap,
+                   entry_time=datetime.now(timezone.utc))
+    STORE.add_position(user.id, pos)
+    await update.message.reply_text(
+        f"✅ Tracking <b>${snap.symbol}</b> (MC {format_currency(snap.market_cap)}).\n"
+        f"I'll DM you on stop-loss (-{pos.stop_loss_pct:.0f}%), "
+        f"take-profit (+{pos.take_profit_pct:.0f}%), "
+        f"trailing ({pos.trailing_pct:.0f}%) or a liquidity rug.\n"
+        f"<i>Not financial advice.</i>", parse_mode='HTML')
+
+
+async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    positions = STORE.get_positions(user.id)
+    if not positions:
+        await update.message.reply_text(
+            "📭 No tracked positions. Use <code>/track &lt;CA&gt;</code>.",
+            parse_mode='HTML')
+        return
+    lines = ["📊 <b>Your tracked positions</b>", ""]
+    keyboard = []
+    for p in positions:
+        snap = await asyncio.to_thread(fetch_token, p.address)
+        if snap and snap.price > 0 and p.entry_price > 0:
+            pnl = (snap.price / p.entry_price - 1) * 100
+            lines.append(f"<b>${p.symbol}</b> {pnl:+.0f}%  "
+                         f"(entry MC {format_currency(p.entry_mc)})")
+        else:
+            lines.append(f"<b>${p.symbol}</b> (no live data)")
+        keyboard.append([InlineKeyboardButton(
+            f"❌ Stop tracking {p.symbol}",
+            callback_data=f"UNTRACK_{p.address}")])
+    await update.message.reply_text(
+        "\n".join(lines), reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode='HTML')
+
+
+async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Natural-language Q&A grounded in the live scan + the user's positions."""
+    user = update.effective_user
+    allowed, reason = await check_access(context, user.id)
+    if not allowed:
+        await update.message.reply_text(reason, parse_mode='HTML')
+        return
+    if not chat_enabled():
+        await update.message.reply_text(
+            "🧠 The <b>/ask</b> assistant is off. Set a free API key "
+            "(<code>GEMINI_API_KEY</code> or <code>GROQ_API_KEY</code>) and "
+            "restart to enable natural-language questions.", parse_mode='HTML')
+        return
+    question = " ".join(context.args).strip()
+    if not question:
+        await update.message.reply_text(
+            "Usage: <code>/ask &lt;question&gt;</code>\n"
+            "e.g. <i>/ask which token has the cleanest setup right now?</i>",
+            parse_mode='HTML')
+        return
+
+    notice = await update.message.reply_text("🧠 Thinking…")
+    signals = await asyncio.to_thread(run_scan, 40, 10)  # broader context
+    positions_ctx = []
+    for p in STORE.get_positions(user.id):
+        snap = await asyncio.to_thread(fetch_token, p.address)
+        pnl = ((snap.price / p.entry_price - 1) * 100
+               if snap and snap.price > 0 and p.entry_price > 0 else 0.0)
+        positions_ctx.append((p, pnl))
+
+    ctx = build_chat_context(signals, positions_ctx)
+    try:
+        reply = await asyncio.to_thread(chat_answer, question, ctx)
+    except Exception as e:
+        logging.warning("ask failed: %s", e)
+        reply = "⚠️ Assistant error — the LLM request failed. Try again shortly."
+    # Send as plain text: LLM output may contain characters that break HTML parse.
+    try:
+        await notice.edit_text(reply)
+    except Exception:
+        await update.message.reply_text(reply)
+
+
+async def monitor_positions_job(context: ContextTypes.DEFAULT_TYPE):
+    """Periodic exit-signal monitor: DMs users when to act on a position."""
+    try:
+        updates = await asyncio.to_thread(check_positions, STORE)
+    except Exception as e:
+        logging.warning("monitor job failed: %s", e)
+        return
+    icons = {"TAKE_PROFIT": "🎯", "TRAILING_STOP": "📉", "STOP_LOSS": "🛑",
+             "MOMENTUM_FADE": "⚠️", "RUG_EXIT": "🚨"}
+    for u in updates:
+        ex, pos = u.exit_signal, u.position
+        icon = icons.get(ex.action.value, "🔔")
+        text = (f"{icon} <b>EXIT SIGNAL — ${pos.symbol}</b>\n"
+                f"{ex.action.value.replace('_', ' ').title()} "
+                f"({ex.pnl_pct:+.0f}%)\n\n"
+                + "\n".join(ex.reasons)
+                + "\n\n<i>Not financial advice.</i>")
+        try:
+            await context.bot.send_message(int(u.user_id), text,
+                                           parse_mode='HTML')
+        except Exception:
+            pass  # user_id not a DM-able chat, or blocked the bot
+
+
 async def post_init(application: Application):
     alerts = load_alerts_from_disk()
     print(f"🔄 Restoring {len(alerts)} alerts...")
@@ -340,11 +539,20 @@ async def post_init(application: Application):
         create_alert_job(application, a['chat_id'], a['user_id'], a['user_name'], a['address'], a['target'], a['cond'], a['symbol'], job_name=a['job_name'])
     
     commands = [
-        BotCommand("alert", "Set Target: /alert [CA] [MC]"),
-        BotCommand("alerts", "Manage Active Alerts")
+        BotCommand("scan", "Scan $1M+ tokens with momentum"),
+        BotCommand("ask", "Ask about the market in plain English"),
+        BotCommand("alert", "Set MC alert: /alert [CA] [MC]"),
+        BotCommand("alerts", "Manage active alerts"),
+        BotCommand("track", "Track a token for exit signals"),
+        BotCommand("positions", "View tracked positions"),
     ]
     await application.bot.set_my_commands(commands)
     print("✅ Commands pushed!")
+
+    # Background exit-signal monitor (the "when to exit" half of the agent).
+    application.job_queue.run_repeating(
+        monitor_positions_job, interval=90, first=30, name="radar_monitor")
+    print("🛰️  Position monitor scheduled (every 90s).")
 
 def run_bot():
     keep_alive()
@@ -354,6 +562,10 @@ def run_bot():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
     # Handlers
+    app.add_handler(CommandHandler("scan", scan_command))
+    app.add_handler(CommandHandler("ask", ask_command))
+    app.add_handler(CommandHandler("track", track_command))
+    app.add_handler(CommandHandler("positions", positions_command))
     app.add_handler(CommandHandler("alerts", list_alerts))
     app.add_handler(CommandHandler("override", override_login))
     app.add_handler(CommandHandler("id", get_id_secure))

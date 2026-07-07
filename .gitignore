@@ -1,0 +1,21 @@
+# Runtime data / secrets — never commit
+alerts_db.json
+admins.json
+radar_state.json
+radar_state.json.tmp
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

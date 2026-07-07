@@ -1,0 +1,24 @@
+# systemd unit for running Radar 24/7 on a VM (e.g. Oracle Cloud "Always Free").
+# Install:
+#   sudo cp deploy/radar.service /etc/systemd/system/radar.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now radar
+# Logs:  journalctl -u radar -f
+
+[Unit]
+Description=Radar Telegram signal bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=radar
+WorkingDirectory=/opt/radar
+# Put TELEGRAM_TOKEN / GATEKEEPER_GROUP_ID / etc. in this file (chmod 600).
+EnvironmentFile=/opt/radar/.env
+ExecStart=/opt/radar/venv/bin/python main.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

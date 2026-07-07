@@ -1,0 +1,4 @@
+# Tells Replit how to start Radar. Installs deps (fast after the first run,
+# since Replit caches the filesystem) then launches the bot.
+run = "pip install -r requirements.txt && python3 main.py"
+entrypoint = "main.py"
