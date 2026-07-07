@@ -7,8 +7,8 @@ to stare at charts.
 
 Primarily, Radar **monitors the live Solana market and tells you what's moving and why**:
 
-- **Watches the market on its own** — pushes an alert the moment a token spikes fast
-  on rising volume, no prompting needed.
+- **Watches the market on its own** — scans every ~2 minutes and pushes an alert when
+  a token spikes on rising volume. Opt a chat in with `/radar on` (no prompting after).
 - **Screens for momentum on demand** — ranks live tokens above $1M by price action,
   volume acceleration, buy pressure and liquidity, with transparent reasons.
 - **Manages your positions** — tracks entries and DMs you when to exit (stop-loss /
@@ -131,6 +131,8 @@ project notes for the step-by-step deploy.
 python tests/test_signals.py        # 10 signal-engine tests
 python tests/test_store_monitor.py  # 6 store + monitor tests
 python tests/test_chat.py           # 5 chat-layer tests (offline)
+python tests/test_pulse.py          # 6 fast-mover detector tests
+python tests/test_bot_jobs.py       # integration: background jobs -> Telegram delivery
 ```
 
 ## Tech stack
