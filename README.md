@@ -43,6 +43,7 @@ and CLIs are thin shells over it.
 | Command | Description |
 | --- | --- |
 | `/scan` | Screen $1M+ tokens by momentum, ranked with reasons |
+| `/ask <question>` | Ask about the market in plain English (needs a free LLM key) |
 | `/track <CA>` | Track a token for exit signals |
 | `/positions` | View tracked positions with live P&L; tap to stop tracking |
 | `/alert` | Set an MC alert (wizard, or `/alert <CA> <MC>` in a group) |
@@ -73,6 +74,12 @@ python track.py rm <CA>        # stop tracking
 | `UPSTASH_REDIS_REST_URL` | optional | Enables Redis storage (else local JSON file) |
 | `UPSTASH_REDIS_REST_TOKEN` | optional | Upstash REST token (pair with the URL above) |
 | `RADAR_STATE_FILE` | optional | Path for the local JSON store (default `radar_state.json`) |
+| `GEMINI_API_KEY` | optional | Enables `/ask` via Google Gemini free tier |
+| `GROQ_API_KEY` | optional | Enables `/ask` via Groq free tier (used if no Gemini key) |
+
+**`/ask` assistant:** a free LLM (Gemini or Groq) that answers questions grounded
+**only** in the live scan + your positions — it narrates the engine's data, it never
+scores tokens or invents numbers. Disabled and harmless if no key is set.
 
 **Storage:** with no Upstash vars set, all state (alerts, admins, positions) lives in a
 single local JSON file — great for a VM. Set the two `UPSTASH_*` vars and the exact same
@@ -108,6 +115,7 @@ project notes for the step-by-step deploy.
 ```bash
 python tests/test_signals.py        # 10 signal-engine tests
 python tests/test_store_monitor.py  # 6 store + monitor tests
+python tests/test_chat.py           # 5 chat-layer tests (offline)
 ```
 
 ## Tech stack

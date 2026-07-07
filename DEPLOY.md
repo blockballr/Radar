@@ -28,6 +28,13 @@ Radar is a long-polling Telegram bot with a background monitor, so it needs an
    - First run? Set `MASTER_PASSWORD`, DM the bot `/override <password>` to make
      yourself admin so `/id` works.
 
+### 1c-bis. (Optional) `/ask` assistant — free LLM
+Enable natural-language questions by setting **one** free API key:
+- `GEMINI_API_KEY` from [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (preferred), or
+- `GROQ_API_KEY` from [console.groq.com/keys](https://console.groq.com/keys).
+
+Leave both unset and `/ask` simply tells users it's off — everything else works.
+
 ### 1c. (Optional) Upstash Redis — free tier
 Only needed for serverless, or if you want state off the VM disk.
 1. Sign up at [upstash.com](https://upstash.com) → **Create Database** (Redis, free).

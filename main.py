@@ -13,6 +13,9 @@ from threading import Thread
 from engine import (
     Position,
     Verdict,
+    build_chat_context,
+    chat_answer,
+    chat_enabled,
     check_positions,
     discover,
     fetch_token,
@@ -462,6 +465,49 @@ async def positions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode='HTML')
 
 
+async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Natural-language Q&A grounded in the live scan + the user's positions."""
+    user = update.effective_user
+    allowed, reason = await check_access(context, user.id)
+    if not allowed:
+        await update.message.reply_text(reason, parse_mode='HTML')
+        return
+    if not chat_enabled():
+        await update.message.reply_text(
+            "🧠 The <b>/ask</b> assistant is off. Set a free API key "
+            "(<code>GEMINI_API_KEY</code> or <code>GROQ_API_KEY</code>) and "
+            "restart to enable natural-language questions.", parse_mode='HTML')
+        return
+    question = " ".join(context.args).strip()
+    if not question:
+        await update.message.reply_text(
+            "Usage: <code>/ask &lt;question&gt;</code>\n"
+            "e.g. <i>/ask which token has the cleanest setup right now?</i>",
+            parse_mode='HTML')
+        return
+
+    notice = await update.message.reply_text("🧠 Thinking…")
+    signals = await asyncio.to_thread(run_scan, 40, 10)  # broader context
+    positions_ctx = []
+    for p in STORE.get_positions(user.id):
+        snap = await asyncio.to_thread(fetch_token, p.address)
+        pnl = ((snap.price / p.entry_price - 1) * 100
+               if snap and snap.price > 0 and p.entry_price > 0 else 0.0)
+        positions_ctx.append((p, pnl))
+
+    ctx = build_chat_context(signals, positions_ctx)
+    try:
+        reply = await asyncio.to_thread(chat_answer, question, ctx)
+    except Exception as e:
+        logging.warning("ask failed: %s", e)
+        reply = "⚠️ Assistant error — the LLM request failed. Try again shortly."
+    # Send as plain text: LLM output may contain characters that break HTML parse.
+    try:
+        await notice.edit_text(reply)
+    except Exception:
+        await update.message.reply_text(reply)
+
+
 async def monitor_positions_job(context: ContextTypes.DEFAULT_TYPE):
     """Periodic exit-signal monitor: DMs users when to act on a position."""
     try:
@@ -494,6 +540,7 @@ async def post_init(application: Application):
     
     commands = [
         BotCommand("scan", "Scan $1M+ tokens with momentum"),
+        BotCommand("ask", "Ask about the market in plain English"),
         BotCommand("alert", "Set MC alert: /alert [CA] [MC]"),
         BotCommand("alerts", "Manage active alerts"),
         BotCommand("track", "Track a token for exit signals"),
@@ -516,6 +563,7 @@ def run_bot():
 
     # Handlers
     app.add_handler(CommandHandler("scan", scan_command))
+    app.add_handler(CommandHandler("ask", ask_command))
     app.add_handler(CommandHandler("track", track_command))
     app.add_handler(CommandHandler("positions", positions_command))
     app.add_handler(CommandHandler("alerts", list_alerts))
