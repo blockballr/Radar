@@ -1,0 +1,32 @@
+# Fly.io deployment for Radar.
+# Deploy with:  fly launch --no-deploy   (accept this file)  then  fly deploy
+# Set secrets first (see DEPLOY.md), e.g.:
+#   fly secrets set TELEGRAM_TOKEN=... GATEKEEPER_GROUP_ID=... MASTER_PASSWORD=...
+
+app = "radar-bot"
+primary_region = "iad"
+
+[build]
+
+[env]
+  PYTHONUNBUFFERED = "1"
+
+# The bot long-polls, so the machine must stay running (do NOT auto-stop).
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+  cpus = 1
