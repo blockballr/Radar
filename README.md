@@ -1,16 +1,23 @@
 # Radar 📡
 
-**Radar** (a.k.a. *OffTheBlock / OTB*) is a Telegram **token screener + signal agent**
-for Solana. It does three things:
+**Radar is an autonomous market agent for Solana, delivered through Telegram.** It
+watches the market for you — continuously scanning for momentum, flagging tokens
+that suddenly move on volume, and managing the positions you hold — so you don't have
+to stare at charts.
 
-1. **Alerts** — pings you when a token's market cap crosses a target you set.
-2. **Scans** — screens live tokens above $1M for the strongest momentum, ranked with
-   transparent reasons.
-3. **Tracks** — babysits your (paper) positions and DMs you when to exit
-   (stop-loss / take-profit / trailing stop / momentum fade / liquidity rug).
+Primarily, Radar **monitors the live Solana market and tells you what's moving and why**:
+
+- **Watches the market on its own** — pushes an alert the moment a token spikes fast
+  on rising volume, no prompting needed.
+- **Screens for momentum on demand** — ranks live tokens above $1M by price action,
+  volume acceleration, buy pressure and liquidity, with transparent reasons.
+- **Manages your positions** — tracks entries and DMs you when to exit (stop-loss /
+  take-profit / trailing stop / momentum fade / liquidity rug).
+- **Answers questions** — ask it about the market in plain English.
+- **Custom market-cap alerts** — pings you when a token crosses a target you set.
 
 Market data comes from free, no-key public APIs — [GeckoTerminal](https://www.geckoterminal.com/dex-api)
-for discovery/metrics and [DexScreener](https://dexscreener.com) for the alert wizard.
+for discovery/metrics and [DexScreener](https://dexscreener.com) for token lookups.
 
 > ⚠️ **Not financial advice.** The scanner and exit calls are transparent momentum
 > heuristics, not alpha. Tokens above $1M market cap are still highly risky.

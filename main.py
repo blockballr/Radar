@@ -181,7 +181,7 @@ async def check_alerts(context: ContextTypes.DEFAULT_TYPE):
             user_tag = f"<a href='tg://user?id={job['user_id']}'>{job['user_name']}</a>"
             fmt_target = format_currency(job['target'])
             fmt_mc = format_currency(data['mc'])
-            msg = (f"{emoji} <b>OFFTHEBLOCK ALERT</b>\n🔔 Set by: {user_tag}\n\n💎 <b>{data['symbol']}</b>\nTarget: {fmt_target}\nCurrent MC: <b>{fmt_mc}</b>\nPrice: ${data['price']:.6f}")
+            msg = (f"{emoji} <b>RADAR ALERT</b>\n🔔 Set by: {user_tag}\n\n💎 <b>{data['symbol']}</b>\nTarget: {fmt_target}\nCurrent MC: <b>{fmt_mc}</b>\nPrice: ${data['price']:.6f}")
             try: await context.bot.send_message(job['chat_id'], msg, parse_mode='HTML')
             except: pass
             remove_alert_from_disk(job_name)
