@@ -1,4 +1,4 @@
-"""Offline tests for the store + position monitor — no network required.
+"""Offline tests for the store + position monitor - no network required.
 
 Run:  python tests/test_store_monitor.py
 """

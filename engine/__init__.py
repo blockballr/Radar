@@ -1,4 +1,4 @@
-"""Radar signal engine — host-agnostic core.
+"""Radar signal engine - host-agnostic core.
 
 Discovery + scoring live here with no Telegram or hosting dependencies, so
 the same code runs from the CLI, a cron loop, or the bot.

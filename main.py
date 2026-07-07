@@ -388,12 +388,12 @@ def format_scan(signals) -> str:
     if not signals:
         return ("📡 <b>Radar Scan</b>\nNo momentum candidates above the bar "
                 "right now. Try again shortly.")
-    lines = ["📡 <b>Radar Scan</b> — top momentum &gt;$1M",
+    lines = ["📡 <b>Radar Scan</b> - top momentum &gt;$1M",
              "<i>Not financial advice.</i>", ""]
     for s in signals:
         snap = s.snapshot
         lines.append(
-            f"{_badge(s.verdict)} <b>${snap.symbol}</b> — {s.score}\n"
+            f"{_badge(s.verdict)} <b>${snap.symbol}</b> - {s.score}\n"
             f"MC {format_currency(snap.market_cap)} · "
             f"Liq {format_currency(snap.liquidity)} · "
             f"1h {snap.change_h1:+.0f}% 6h {snap.change_h6:+.0f}%\n"
@@ -510,7 +510,7 @@ async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply = await asyncio.to_thread(chat_answer, question, ctx)
     except Exception as e:
         logging.warning("ask failed: %s", e)
-        reply = "⚠️ Assistant error — the LLM request failed. Try again shortly."
+        reply = "⚠️ Assistant error - the LLM request failed. Try again shortly."
     # Send as plain text: LLM output may contain characters that break HTML parse.
     try:
         await notice.edit_text(reply)
@@ -560,7 +560,7 @@ def _prune_seen(seen, now, hours=6):
 
 def format_pulse(alert) -> str:
     s = alert.snapshot
-    return (f"⚡ <b>FAST MOVER — ${s.symbol}</b>\n"
+    return (f"⚡ <b>FAST MOVER - ${s.symbol}</b>\n"
             f"{alert.trigger}\n"
             f"MC {format_currency(s.market_cap)} · "
             f"Liq {format_currency(s.liquidity)} · "
@@ -586,7 +586,7 @@ async def radar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _save_pulse_subs(subs)
         await update.message.reply_text(
             "⚡ <b>Radar auto-alerts ON.</b>\nI'll ping this chat when a token "
-            "spikes fast on rising volume — no tracking needed.\n"
+            "spikes fast on rising volume - no tracking needed.\n"
             "<i>Not financial advice.</i>", parse_mode='HTML')
     elif arg == "off":
         _save_pulse_subs([x for x in subs if x != cid])
@@ -603,7 +603,7 @@ async def radar_pulse_job(context: ContextTypes.DEFAULT_TYPE):
     """Scan the market and push fast-mover alerts to opted-in chats."""
     recipients = _pulse_recipients()
     if not recipients:
-        return  # nobody listening — skip the API calls entirely
+        return  # nobody listening - skip the API calls entirely
     try:
         snaps = await asyncio.to_thread(discover)
     except Exception as e:
@@ -657,7 +657,7 @@ async def monitor_positions_job(context: ContextTypes.DEFAULT_TYPE):
     for u in updates:
         ex, pos = u.exit_signal, u.position
         icon = icons.get(ex.action.value, "🔔")
-        text = (f"{icon} <b>EXIT SIGNAL — ${pos.symbol}</b>\n"
+        text = (f"{icon} <b>EXIT SIGNAL - ${pos.symbol}</b>\n"
                 f"{ex.action.value.replace('_', ' ').title()} "
                 f"({ex.pnl_pct:+.0f}%)\n\n"
                 + "\n".join(ex.reasons)
@@ -671,7 +671,7 @@ async def monitor_positions_job(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(application: Application):
     alerts = load_alerts_from_disk()
-    print(f"🔄 Restoring {len(alerts)} alerts...")
+    print(f"Restoring {len(alerts)} alerts...")
     for a in alerts:
         create_alert_job(application, a['chat_id'], a['user_id'], a['user_name'], a['address'], a['target'], a['cond'], a['symbol'], job_name=a['job_name'])
     
@@ -685,22 +685,22 @@ async def post_init(application: Application):
         BotCommand("positions", "View tracked positions"),
     ]
     await application.bot.set_my_commands(commands)
-    print("✅ Commands pushed!")
+    print("Commands pushed!")
 
     # Background exit-signal monitor (the "when to exit" half of the agent).
     application.job_queue.run_repeating(
         monitor_positions_job, interval=90, first=30, name="radar_monitor")
-    print("🛰️  Position monitor scheduled (every 90s).")
+    print("Position monitor scheduled (every 90s).")
 
     # Autonomous fast-mover radar (only pings chats that ran /radar on).
     application.job_queue.run_repeating(
         radar_pulse_job, interval=PULSE_INTERVAL, first=45, name="radar_pulse")
-    print(f"⚡ Fast-mover radar scheduled (every {PULSE_INTERVAL}s).")
+    print(f"Fast-mover radar scheduled (every {PULSE_INTERVAL}s).")
 
 def run_bot():
     keep_alive()
     if not TELEGRAM_TOKEN:
-        print("❌ ERROR: TELEGRAM_TOKEN missing.")
+        print("ERROR: TELEGRAM_TOKEN missing.")
         return
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).post_init(post_init).build()
 
@@ -729,7 +729,7 @@ def run_bot():
     )
     app.add_handler(conv_handler)
 
-    print("🤖 Radar is Online & Crash Proof...")
+    print("Radar is Online & Crash Proof...")
     app.run_polling()
 
 if __name__ == '__main__':

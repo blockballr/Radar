@@ -1,4 +1,4 @@
-"""Position monitor — the exit side of the agent.
+"""Position monitor - the exit side of the agent.
 
 Given a store of tracked positions, refresh each one's live data, run it
 through the exit engine, persist the updated trailing high-water mark, and
@@ -49,7 +49,7 @@ def check_positions(store: KVStore, fetch: Fetcher = fetch_token) -> List[Positi
         for pos in positions:
             snap = fetch(pos.address)
             if snap is None:
-                survivors.append(pos)  # transient fetch miss — keep it
+                survivors.append(pos)  # transient fetch miss - keep it
                 continue
             ex = evaluate_exit(pos, snap)  # updates pos.peak_* in place
             if ex.should_exit:

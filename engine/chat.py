@@ -3,12 +3,12 @@
 Turns a user question + the live deterministic scan/position data into a
 plain-English answer using a free LLM (Google Gemini or Groq). The model is
 strictly a *narrator*: it is given the engine's data and told to answer only
-from it — it never scores tokens, invents numbers, or decides trades. Those
+from it - it never scores tokens, invents numbers, or decides trades. Those
 stay in `signals.py`.
 
 Enabled by setting one env var:
-  * GEMINI_API_KEY  — https://aistudio.google.com/apikey  (free tier)
-  * GROQ_API_KEY    — https://console.groq.com/keys       (free tier)
+  * GEMINI_API_KEY  - https://aistudio.google.com/apikey  (free tier)
+  * GROQ_API_KEY    - https://console.groq.com/keys       (free tier)
 
 If neither is set, `is_enabled()` returns False and the bot tells the user how
 to turn it on. No LLM dependency is required to run the rest of Radar.
@@ -29,7 +29,7 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 
 SYSTEM = (
     "You are Radar, a Solana token screening assistant. Answer the user's "
-    "question using ONLY the DATA block below — a live momentum scan and, if "
+    "question using ONLY the DATA block below - a live momentum scan and, if "
     "present, the user's tracked positions. Never invent tokens, prices, or "
     "numbers that are not in the data; if the data doesn't cover the question, "
     "say so. Be concise and specific, reference tokens by their $SYMBOL, and "

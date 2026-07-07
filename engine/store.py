@@ -1,11 +1,11 @@
-"""Persistence for Radar — pluggable KV backend.
+"""Persistence for Radar - pluggable KV backend.
 
 State (tracked positions, alerts, admins) must live outside the process so
 the bot works on serverless / ephemeral hosts. Two backends share one
 interface:
 
-  * JsonStore    — a local JSON file. Zero setup, for dev / a single VM.
-  * UpstashStore — Upstash Redis over its REST API (needs only `requests`,
+  * JsonStore    - a local JSON file. Zero setup, for dev / a single VM.
+  * UpstashStore - Upstash Redis over its REST API (needs only `requests`,
                    so it works from serverless functions and cron jobs).
 
 `get_store()` picks Upstash automatically when its env vars are present,

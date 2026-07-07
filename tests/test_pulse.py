@@ -1,4 +1,4 @@
-"""Offline tests for the fast-mover detector — no network required.
+"""Offline tests for the fast-mover detector - no network required.
 
 Run:  python tests/test_pulse.py
 """

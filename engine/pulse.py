@@ -1,6 +1,6 @@
 """Autonomous "fast mover" detector.
 
-Finds tokens spiking hard in a short window **on surging volume** — the kind
+Finds tokens spiking hard in a short window **on surging volume** - the kind
 of move you'd want pinged to you in real time without having to run /scan.
 Pure and stateless so it's easy to test; the bot layer handles who to notify
 and the per-token cooldown.
@@ -21,11 +21,11 @@ class PulseConfig:
     MIN_LIQUIDITY = 30_000
     MIN_VOLUME_H1 = 50_000         # needs real recent volume, not a dead ghost
 
-    # "Moving fast" — a spike in a SHORT window
+    # "Moving fast" - a spike in a SHORT window
     SPIKE_M5 = 12.0                # +12% in 5 minutes, or...
     SPIKE_H1 = 35.0                # +35% in 1 hour
 
-    # "On volume" — trading well above its own recent pace
+    # "On volume" - trading well above its own recent pace
     MIN_VOL_ACCEL = 2.5            # last hour >= 2.5x the 24h hourly average
 
     # Real buyers, not just a wick
