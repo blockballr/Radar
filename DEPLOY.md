@@ -48,14 +48,19 @@ Only needed for serverless, or if you want state off the VM disk.
 
 A free ARM/x86 VM that runs 24/7 at no cost.
 
+> **First:** merge the PR into `main` so `main` has the new code, **or** clone the
+> branch directly with `-b worktree-radar-serverless` in the command below.
+> (Plain `main` holds the *old* bot until the PR is merged.)
+
 1. Create an [Oracle Cloud](https://www.oracle.com/cloud/free/) account and launch
    an **Always Free** compute instance (Ubuntu 22.04 is easy).
 2. SSH in, then:
 
    ```bash
    sudo apt update && sudo apt install -y python3-venv git
-   sudo useradd -r -m -d /opt/radar radar || true
+   # Clone first, then create the service user pointing at that dir.
    sudo git clone https://github.com/blockballr/Radar.git /opt/radar
+   sudo useradd -r -s /usr/sbin/nologin -d /opt/radar radar
    cd /opt/radar
    sudo python3 -m venv venv
    sudo ./venv/bin/pip install -r requirements.txt
